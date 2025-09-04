@@ -18,7 +18,14 @@ interface AuthContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
   login: (credentials: { email: string; password: string }) => Promise<void>;
-  register: (userData: { name: string; email: string; password: string }) => Promise<void>;
+  register: (userData: { 
+    firstName: string; 
+    lastName: string; 
+    email: string; 
+    phone: string; 
+    dateOfBirth: string; 
+    password: string; 
+  }) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (userData: Partial<User>) => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -82,7 +89,14 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   };
 
-  const register = async (userData: { name: string; email: string; password: string }) => {
+  const register = async (userData: { 
+    firstName: string; 
+    lastName: string; 
+    email: string; 
+    phone: string; 
+    dateOfBirth: string; 
+    password: string; 
+  }) => {
     try {
       setIsLoading(true);
       const response = await authAPI.register(userData);

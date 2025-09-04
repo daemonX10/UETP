@@ -34,6 +34,26 @@ export const useMarketData = (): UseMarketDataReturn => {
   const wsRef = useRef<MarketDataWebSocket | null>(null);
   const subscriptionsRef = useRef<Set<string>>(new Set());
 
+  // Generate mock data for when WebSocket is not available
+  const generateMockData = useCallback((symbol: string): MarketDataItem => {
+    const basePrice = Math.random() * 1000 + 100;
+    const change = (Math.random() - 0.5) * 20;
+    const changePercent = (change / basePrice) * 100;
+    
+    return {
+      symbol,
+      price: Math.round(basePrice * 100) / 100,
+      change: Math.round(change * 100) / 100,
+      changePercent: Math.round(changePercent * 100) / 100,
+      volume: Math.floor(Math.random() * 1000000),
+      high: Math.round((basePrice + Math.abs(change)) * 100) / 100,
+      low: Math.round((basePrice - Math.abs(change)) * 100) / 100,
+      open: Math.round((basePrice - change) * 100) / 100,
+      previousClose: Math.round((basePrice - change) * 100) / 100,
+      lastUpdated: new Date().toISOString(),
+    };
+  }, []);
+
   const handleMarketUpdate = useCallback((data: MarketDataItem[] | MarketDataItem) => {
     const updates = Array.isArray(data) ? data : [data];
     
@@ -56,23 +76,31 @@ export const useMarketData = (): UseMarketDataReturn => {
     try {
       wsRef.current = new MarketDataWebSocket();
       
-      // Override connection status tracking
       const originalConnect = wsRef.current.connect.bind(wsRef.current);
       wsRef.current.connect = () => {
-        originalConnect();
+        try {
+          originalConnect();
+        } catch (err) {
+          console.warn('WebSocket connection failed, using mock data:', err);
+          setIsConnected(false);
+          setError('WebSocket unavailable - using simulated data');
+          return;
+        }
         
         // Monitor connection status
         const checkConnection = () => {
           if (wsRef.current) {
             setIsConnected(wsRef.current.isConnected);
-            setError(wsRef.current.isConnected ? null : 'WebSocket disconnected');
             
             if (wsRef.current.isConnected) {
+              setError(null);
               // Re-subscribe to all symbols
               const symbols = Array.from(subscriptionsRef.current);
               if (symbols.length > 0) {
                 wsRef.current.subscribe(symbols, handleMarketUpdate);
               }
+            } else {
+              setError('WebSocket disconnected - using simulated data');
             }
           }
         };
@@ -86,7 +114,8 @@ export const useMarketData = (): UseMarketDataReturn => {
 
       wsRef.current.connect();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect to market data');
+      console.warn('Failed to create WebSocket connection, using mock data:', err);
+      setError('WebSocket service unavailable - using simulated data');
       setIsConnected(false);
     }
   }, [handleMarketUpdate]);
@@ -101,12 +130,33 @@ export const useMarketData = (): UseMarketDataReturn => {
   }, []);
 
   const subscribe = useCallback((symbols: string[]) => {
-    if (!wsRef.current) {
-      connect();
-    }
-
     // Add symbols to our tracking
     symbols.forEach(symbol => subscriptionsRef.current.add(symbol));
+
+    // If WebSocket is not connected, provide mock data immediately
+    if (!wsRef.current || !wsRef.current.isConnected) {
+      const mockData: Record<string, MarketDataItem> = {};
+      symbols.forEach(symbol => {
+        mockData[symbol] = generateMockData(symbol);
+      });
+      
+      setMarketData(prev => ({ ...prev, ...mockData }));
+      
+      // Update mock data periodically
+      const mockInterval = setInterval(() => {
+        const updatedMockData: Record<string, MarketDataItem> = {};
+        symbols.forEach(symbol => {
+          updatedMockData[symbol] = generateMockData(symbol);
+        });
+        setMarketData(prev => ({ ...prev, ...updatedMockData }));
+      }, 3000); // Update every 3 seconds
+
+      // Return unsubscribe function for mock data
+      return () => {
+        clearInterval(mockInterval);
+        symbols.forEach(symbol => subscriptionsRef.current.delete(symbol));
+      };
+    }
 
     let subscriptionId: string | null = null;
 
@@ -122,7 +172,7 @@ export const useMarketData = (): UseMarketDataReturn => {
         wsRef.current.unsubscribe(subscriptionId);
       }
     };
-  }, [connect, handleMarketUpdate]);
+  }, [handleMarketUpdate, generateMockData]);
 
   const unsubscribe = useCallback((symbols: string[]) => {
     symbols.forEach(symbol => {
@@ -136,9 +186,14 @@ export const useMarketData = (): UseMarketDataReturn => {
     });
   }, []);
 
-  // Auto-connect on mount
+  // Auto-connect on mount with fallback
   useEffect(() => {
-    connect();
+    // Try to connect, but don't fail if WebSocket is unavailable
+    try {
+      connect();
+    } catch (err) {
+      console.warn('WebSocket connection failed on mount, will use mock data');
+    }
 
     // Cleanup on unmount
     return () => {
@@ -146,13 +201,17 @@ export const useMarketData = (): UseMarketDataReturn => {
     };
   }, [connect, disconnect]);
 
-  // Reconnection logic
+  // Reconnection logic with limited attempts
   useEffect(() => {
     if (!isConnected && wsRef.current) {
       const reconnectTimer = setTimeout(() => {
         console.log('🔄 Attempting to reconnect to market data...');
-        connect();
-      }, 5000);
+        try {
+          connect();
+        } catch (err) {
+          console.warn('Reconnection failed, continuing with mock data');
+        }
+      }, 10000); // Retry every 10 seconds
 
       return () => clearTimeout(reconnectTimer);
     }

@@ -199,6 +199,8 @@ export class MarketDataWebSocket {
   connect() {
     try {
       const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000/ws/market-data';
+      console.log('🔗 Attempting to connect to WebSocket:', wsUrl);
+      
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
@@ -217,17 +219,29 @@ export class MarketDataWebSocket {
         }
       };
 
-      this.ws.onclose = () => {
-        console.log('📡 WebSocket connection closed');
+      this.ws.onclose = (event) => {
+        console.log('📡 WebSocket connection closed', event.code, event.reason);
         this.isConnected = false;
         this.attemptReconnect();
       };
 
       this.ws.onerror = (error) => {
         console.error('📡 WebSocket error:', error);
+        this.isConnected = false;
       };
+
+      // Set a timeout for connection
+      setTimeout(() => {
+        if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+          console.warn('⚠️ WebSocket connection timeout');
+          this.ws.close();
+        }
+      }, 10000); // 10 second timeout
+
     } catch (error) {
-      console.error('Error creating WebSocket connection:', error);
+      console.error('❌ Error creating WebSocket connection:', error);
+      this.isConnected = false;
+      throw error;
     }
   }
 

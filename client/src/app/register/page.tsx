@@ -1,358 +1,400 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Link from 'next/link';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useFormValidation } from '@/hooks/useFormValidation';
-import { getEmailValidationRules, getPasswordValidationRules, getNameValidationRules, validationRules } from '@/lib/validation';
-import { authService, type RegisterCredentials } from '@/lib/auth';
-import { useToast } from '@/components/ui/toast';
 
-interface RegisterFormData {
-  name: string;
+interface FormData {
+  firstName: string;
+  lastName: string;
   email: string;
+  phone: string;
+  dateOfBirth: string;
   password: string;
   confirmPassword: string;
 }
 
+interface FormErrors {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  phone?: string;
+  dateOfBirth?: string;
+  password?: string;
+  confirmPassword?: string;
+  general?: string;
+}
+
 export default function RegisterPage() {
-  const [showEmailRegister, setShowEmailRegister] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { addToast } = useToast();
+  const { register, isLoading } = useAuth();
+  
+  const [formData, setFormData] = useState<FormData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    dateOfBirth: '',
+    password: '',
+    confirmPassword: ''
+  });
+  
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Check if user is already authenticated
-  useEffect(() => {
-    if (authService.isAuthenticated()) {
-      router.push('/dashboard');
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
+
+    // First name validation
+    if (!formData.firstName.trim()) {
+      newErrors.firstName = 'First name is required';
+    } else if (formData.firstName.trim().length < 2) {
+      newErrors.firstName = 'First name must be at least 2 characters long';
     }
-  }, [router]);
 
-  const {
-    values,
-    errors,
-    touched,
-    setValue,
-    setFieldTouched,
-    validateAllFields,
-    reset,
-  } = useFormValidation<RegisterFormData>(
-    {
-      name: '',
-      email: '',
-      password: '',
-      confirmPassword: '',
-    },
-    {
-      name: getNameValidationRules(),
-      email: getEmailValidationRules(),
-      password: getPasswordValidationRules(true), // Registration requires stronger password
-      confirmPassword: [validationRules.confirmPassword('')], // Will be updated dynamically
+    // Last name validation
+    if (!formData.lastName.trim()) {
+      newErrors.lastName = 'Last name is required';
+    } else if (formData.lastName.trim().length < 2) {
+      newErrors.lastName = 'Last name must be at least 2 characters long';
     }
-  );
 
-  const handleGoogleRegister = async () => {
-    try {
-      setIsLoading(true);
-      const response = await authService.googleLogin(); // Same as login for Google OAuth
+    // Email validation
+    if (!formData.email.trim()) {
+      newErrors.email = 'Email is required';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = 'Please enter a valid email address';
+    }
+
+    // Phone validation
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Phone number is required';
+    } else if (!/^[0-9]{10}$/.test(formData.phone.trim())) {
+      newErrors.phone = 'Phone number must be exactly 10 digits';
+    }
+
+    // Date of birth validation
+    if (!formData.dateOfBirth) {
+      newErrors.dateOfBirth = 'Date of birth is required';
+    } else {
+      const birthDate = new Date(formData.dateOfBirth);
+      const today = new Date();
+      const age = today.getFullYear() - birthDate.getFullYear();
       
-      if (response.success) {
-        addToast({
-          type: 'success',
-          title: 'Registration Successful',
-          message: 'Welcome to UETP!'
-        });
-        router.push('/dashboard');
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Registration Failed',
-          message: response.message
-        });
+      if (age < 18) {
+        newErrors.dateOfBirth = 'You must be at least 18 years old to register';
+      } else if (age > 120) {
+        newErrors.dateOfBirth = 'Please enter a valid date of birth';
       }
-    } catch (error) {
-      addToast({
-        type: 'error',
-        title: 'Registration Error',
-        message: 'An unexpected error occurred. Please try again.'
-      });
-    } finally {
-      setIsLoading(false);
+    }
+
+    // Password validation
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    } else if (formData.password.length < 8) {
+      newErrors.password = 'Password must be at least 8 characters long';
+    } else if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/.test(formData.password)) {
+      newErrors.password = 'Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character (@$!%*?&)';
+    }
+
+    // Confirm password validation
+    if (!formData.confirmPassword) {
+      newErrors.confirmPassword = 'Please confirm your password';
+    } else if (formData.password !== formData.confirmPassword) {
+      newErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    // Clear error for this field when user starts typing
+    if (errors[name as keyof FormErrors]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
     }
   };
 
-  const handleEmailRegisterSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateAllFields()) {
-      addToast({
-        type: 'error',
-        title: 'Validation Error',
-        message: 'Please fix the errors in the form.'
-      });
+    if (!validateForm()) {
       return;
     }
 
+    setIsSubmitting(true);
+    setErrors({});
+
     try {
-      setIsLoading(true);
-      const credentials: RegisterCredentials = {
-        name: values.name,
-        email: values.email,
-        password: values.password,
-        confirmPassword: values.confirmPassword,
-      };
+      await register({
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim(),
+        dateOfBirth: formData.dateOfBirth,
+        password: formData.password
+      });
       
-      const response = await authService.register(credentials);
-      
-      if (response.success) {
-        addToast({
-          type: 'success',
-          title: 'Registration Successful',
-          message: `Welcome to UETP, ${response.user?.name}!`
-        });
-        router.push('/dashboard');
-      } else {
-        addToast({
-          type: 'error',
-          title: 'Registration Failed',
-          message: response.message
-        });
-      }
-    } catch (error) {
-      addToast({
-        type: 'error',
-        title: 'Registration Error',
-        message: 'An unexpected error occurred. Please try again.'
+      // Registration successful, redirect to dashboard
+      router.push('/dashboard');
+    } catch (error: any) {
+      console.error('Registration failed:', error);
+      setErrors({
+        general: error.message || 'Registration failed. Please try again.'
       });
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
-  const handleInputChange = (field: keyof RegisterFormData) => (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    setValue(field, e.target.value);
-  };
-
-  const handleInputBlur = (field: keyof RegisterFormData) => () => {
-    setFieldTouched(field);
-  };
-
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black text-white">
-      <div className="w-full max-w-4xl bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-2xl overflow-hidden border border-gray-700">
-        <div className="flex flex-col lg:flex-row">
-          {/* Left Section - Branding */}
-          <div className="hidden lg:flex flex-col justify-center items-center w-1/2 bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-12 relative overflow-hidden">
-            {/* Background Pattern */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0 bg-gradient-to-br from-gray-600 to-gray-800 opacity-20"></div>
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-cyan-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        {/* Header */}
+        <div className="text-center">
+          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
+            Create your account
+          </h2>
+          <p className="mt-2 text-sm text-gray-600">
+            Join our trading platform and start investing today
+          </p>
+        </div>
+
+        {/* Registration Form */}
+        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+          <div className="space-y-4">
+            {/* First Name Field */}
+            <div>
+              <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">
+                First Name
+              </label>
+              <Input
+                id="firstName"
+                name="firstName"
+                type="text"
+                value={formData.firstName}
+                onChange={handleInputChange}
+                placeholder="Enter your first name"
+                className={`${errors.firstName ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.firstName && (
+                <p className="mt-1 text-sm text-red-600">{errors.firstName}</p>
+              )}
             </div>
-            
-            <div className="relative z-10 text-center">
-              <div className="mb-8">
-                <div className="w-16 h-16 mx-auto mb-6 bg-gradient-to-r from-green-500 to-blue-600 rounded-xl flex items-center justify-center">
-                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
-                    <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
-                  </svg>
-                </div>
-                <h1 className="text-4xl font-bold mb-4 bg-gradient-to-r from-green-400 to-blue-400 bg-clip-text text-transparent">
-                  Join UETP Today
-                </h1>
-                <p className="text-gray-300 text-lg leading-relaxed max-w-md">
-                  Start your trading journey with advanced tools, real-time analytics, and expert support.
-                </p>
-              </div>
-              
-              <div className="space-y-4 text-left">
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                  <span className="text-gray-300">Real-time market data</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                  <span className="text-gray-300">Advanced trading tools</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full"></div>
-                  <span className="text-gray-300">Portfolio management</span>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                  <span className="text-gray-300">24/7 customer support</span>
-                </div>
-              </div>
+
+            {/* Last Name Field */}
+            <div>
+              <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-1">
+                Last Name
+              </label>
+              <Input
+                id="lastName"
+                name="lastName"
+                type="text"
+                value={formData.lastName}
+                onChange={handleInputChange}
+                placeholder="Enter your last name"
+                className={`${errors.lastName ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.lastName && (
+                <p className="mt-1 text-sm text-red-600">{errors.lastName}</p>
+              )}
+            </div>
+
+            {/* Email Field */}
+            <div>
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address
+              </label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                value={formData.email}
+                onChange={handleInputChange}
+                placeholder="Enter your email address"
+                className={`${errors.email ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.email && (
+                <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+              )}
+            </div>
+
+            {/* Phone Field */}
+            <div>
+              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number
+              </label>
+              <Input
+                id="phone"
+                name="phone"
+                type="tel"
+                value={formData.phone}
+                onChange={handleInputChange}
+                placeholder="Enter your 10-digit phone number"
+                className={`${errors.phone ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.phone && (
+                <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+              )}
+            </div>
+
+            {/* Date of Birth Field */}
+            <div>
+              <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700 mb-1">
+                Date of Birth
+              </label>
+              <Input
+                id="dateOfBirth"
+                name="dateOfBirth"
+                type="date"
+                value={formData.dateOfBirth}
+                onChange={handleInputChange}
+                className={`${errors.dateOfBirth ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.dateOfBirth && (
+                <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                You must be at least 18 years old to register
+              </p>
+            </div>
+
+            {/* Password Field */}
+            <div>
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                Password
+              </label>
+              <Input
+                id="password"
+                name="password"
+                type="password"
+                value={formData.password}
+                onChange={handleInputChange}
+                placeholder="Create a strong password"
+                className={`${errors.password ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.password && (
+                <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                Must contain at least 8 characters with uppercase, lowercase, numbers, and special characters (@$!%*?&)
+              </p>
+            </div>
+
+            {/* Confirm Password Field */}
+            <div>
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                Confirm Password
+              </label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                value={formData.confirmPassword}
+                onChange={handleInputChange}
+                placeholder="Confirm your password"
+                className={`${errors.confirmPassword ? 'border-red-500 focus:border-red-500' : ''}`}
+                disabled={isSubmitting}
+              />
+              {errors.confirmPassword && (
+                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+              )}
             </div>
           </div>
 
-          {/* Right Section - Registration Form */}
-          <div className="w-full lg:w-1/2 p-8 lg:p-12">
-            <div className="max-w-md mx-auto">
-              <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold mb-2">
-                  Create Account
-                </h2>
-                <p className="text-gray-400">
-                  Join thousands of traders on UETP
-                </p>
-              </div>
+          {/* General Error Message */}
+          {errors.general && (
+            <div className="bg-red-50 border border-red-200 rounded-md p-3">
+              <p className="text-sm text-red-600">{errors.general}</p>
+            </div>
+          )}
 
-              <div className="transition-all duration-300 ease-in-out">
-                {!showEmailRegister ? (
-                  <div className="space-y-4">
-                    {/* Google Register */}
-                    <Button
-                      onClick={handleGoogleRegister}
-                      loading={isLoading}
-                      loadingText="Creating Account..."
-                      variant="google"
-                      size="lg"
-                      className="w-full"
-                      disabled={isLoading}
-                    >
-                      <img
-                        src="https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Google_%22G%22_Logo.svg/512px-Google_%22G%22_Logo.svg.png"
-                        alt="Google Logo"
-                        className="w-5 h-5 mr-2"
-                      />
-                      Sign up with Google
-                    </Button>
-
-                    {/* Divider */}
-                    <div className="flex items-center my-6">
-                      <hr className="flex-grow border-gray-600" />
-                      <span className="px-4 text-gray-500 text-sm">OR</span>
-                      <hr className="flex-grow border-gray-600" />
-                    </div>
-
-                    {/* Switch to Email Register */}
-                    <Button
-                      onClick={() => setShowEmailRegister(true)}
-                      variant="outline"
-                      size="lg"
-                      className="w-full border-gray-600 hover:bg-gray-700"
-                      disabled={isLoading}
-                    >
-                      Sign up with Email
-                    </Button>
-                  </div>
-                ) : (
-                  <form onSubmit={handleEmailRegisterSubmit} className="space-y-6">
-                    {/* Name Input */}
-                    <Input
-                      type="text"
-                      label="Full Name"
-                      placeholder="Enter your full name"
-                      value={values.name}
-                      onChange={handleInputChange('name')}
-                      onBlur={handleInputBlur('name')}
-                      error={touched.name ? errors.name : undefined}
-                      required
-                      className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                    />
-
-                    {/* Email Input */}
-                    <Input
-                      type="email"
-                      label="Email Address"
-                      placeholder="Enter your email"
-                      value={values.email}
-                      onChange={handleInputChange('email')}
-                      onBlur={handleInputBlur('email')}
-                      error={touched.email ? errors.email : undefined}
-                      required
-                      className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                    />
-
-                    {/* Password Input */}
-                    <Input
-                      type="password"
-                      label="Password"
-                      placeholder="Create a strong password"
-                      value={values.password}
-                      onChange={handleInputChange('password')}
-                      onBlur={handleInputBlur('password')}
-                      error={touched.password ? errors.password : undefined}
-                      required
-                      className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                    />
-
-                    {/* Confirm Password Input */}
-                    <Input
-                      type="password"
-                      label="Confirm Password"
-                      placeholder="Confirm your password"
-                      value={values.confirmPassword}
-                      onChange={handleInputChange('confirmPassword')}
-                      onBlur={handleInputBlur('confirmPassword')}
-                      error={touched.confirmPassword ? errors.confirmPassword : undefined}
-                      required
-                      className="bg-gray-700/50 border-gray-600 text-white placeholder:text-gray-400 focus:border-green-500 focus:ring-green-500"
-                    />
-
-                    {/* Terms and Conditions */}
-                    <div className="flex items-start space-x-2">
-                      <input
-                        type="checkbox"
-                        id="terms"
-                        required
-                        className="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-700 text-green-600 focus:ring-green-500"
-                      />
-                      <label htmlFor="terms" className="text-sm text-gray-300">
-                        I agree to the{' '}
-                        <Link href="/terms" className="text-green-400 hover:text-green-300">
-                          Terms of Service
-                        </Link>{' '}
-                        and{' '}
-                        <Link href="/privacy" className="text-green-400 hover:text-green-300">
-                          Privacy Policy
-                        </Link>
-                      </label>
-                    </div>
-
-                    {/* Submit Button */}
-                    <Button
-                      type="submit"
-                      loading={isLoading}
-                      loadingText="Creating Account..."
-                      size="lg"
-                      className="w-full bg-gradient-to-r from-green-600 to-blue-600 hover:from-green-700 hover:to-blue-700 text-white"
-                      disabled={isLoading}
-                    >
-                      Create Account
-                    </Button>
-
-                    {/* Back to Google Register */}
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={() => setShowEmailRegister(false)}
-                        disabled={isLoading}
-                        className="text-sm text-gray-400 hover:text-white transition-colors disabled:opacity-50"
-                      >
-                        ← Back to Google registration
-                      </button>
-                    </div>
-                  </form>
-                )}
-                
-                {/* Login Link */}
-                <div className="mt-8 pt-6 border-t border-gray-700">
-                  <p className="text-center text-sm text-gray-400">
-                    Already have an account?{' '}
-                    <Link 
-                      href="/login" 
-                      className="text-green-400 hover:text-green-300 font-medium transition-colors"
-                    >
-                      Sign In
-                    </Link>
-                  </p>
+          {/* Submit Button */}
+          <div>
+            <Button
+              type="submit"
+              disabled={isSubmitting || isLoading}
+              className="w-full flex justify-center py-3 px-4 text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isSubmitting || isLoading ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Creating Account...
                 </div>
-              </div>
+              ) : (
+                'Create Account'
+              )}
+            </Button>
+          </div>
+
+          {/* Terms and Conditions */}
+          <div className="text-center">
+            <p className="text-xs text-gray-500">
+              By creating an account, you agree to our{' '}
+              <Link href="/terms" className="text-indigo-600 hover:text-indigo-500">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link href="/privacy" className="text-indigo-600 hover:text-indigo-500">
+                Privacy Policy
+              </Link>
+            </p>
+          </div>
+        </form>
+
+        {/* Login Link */}
+        <div className="text-center">
+          <p className="text-sm text-gray-600">
+            Already have an account?{' '}
+            <Link 
+              href="/login" 
+              className="font-medium text-indigo-600 hover:text-indigo-500 transition-colors"
+            >
+              Sign in here
+            </Link>
+          </p>
+        </div>
+
+        {/* Features Section */}
+        <div className="mt-8 border-t border-gray-200 pt-6">
+          <h3 className="text-sm font-medium text-gray-900 mb-3">Why join our platform?</h3>
+          <div className="space-y-2">
+            <div className="flex items-center text-sm text-gray-600">
+              <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Real-time market data and analytics
+            </div>
+            <div className="flex items-center text-sm text-gray-600">
+              <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Advanced portfolio management tools
+            </div>
+            <div className="flex items-center text-sm text-gray-600">
+              <svg className="h-4 w-4 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Secure and reliable trading platform
             </div>
           </div>
         </div>
