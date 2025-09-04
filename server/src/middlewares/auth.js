@@ -11,13 +11,15 @@ const verifyJWT = asyncHandler(async (req, res, next) => {
             throw new ApiError(401, "Unauthorized user");
         }
 
-        const decryptedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+        // Use JWT_SECRET which is what generateAuthToken uses
+        const decryptedToken = jwt.verify(token, process.env.JWT_SECRET);
 
         if (!decryptedToken) {
             throw new ApiError(500, "Failed to authenticate user");
         }
 
-        const user = await User.findById(decryptedToken?._id);
+        // The token payload uses 'id' not '_id'
+        const user = await User.findById(decryptedToken?.id);
 
         if (!user) {
             throw new ApiError(401, "Invalid Access Token");
@@ -27,7 +29,7 @@ const verifyJWT = asyncHandler(async (req, res, next) => {
 
     } catch (error) {
         return res.json({
-            "statuscode": error.statuscode || 500,
+            "statuscode": error.statusCode || 500,
             "error": error.message
         });
     }

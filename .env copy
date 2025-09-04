@@ -2,21 +2,24 @@
 NODE_ENV=development
 PORT=5000
 
-# Database Configuration
-MONGODB_URI=mongodb://localhost:27017/trading_platform
-DB_NAME=trading_platform
+API_KEY = "BcQWEWIb"
+RESEND_API_KEY = "fdksjafkjeskjesk"
+MONGO_URI = "mongodb+srv://akash:Akash33@cluster0.ha4yr9q.mongodb.net"
+DATABASE_NAME = "Worth"
+
 
 # JWT Configuration
-JWT_SECRET=your_super_secret_jwt_key_here_change_in_production
-JWT_REFRESH_SECRET=your_super_secret_refresh_key_here_change_in_production
-JWT_EXPIRES_IN=24h
-JWT_REFRESH_EXPIRES_IN=7d
+ACCESS_TOKEN_SECRET = "ajkjieou9u299aikjfajkklj222278kjfanjhauiojioj"
+ACCESS_TOKEN_EXPIRY = "1d"
+REFRESH_TOKEN_SECRET = "ajljeiuwijiasiojfajklejkljk3jj37y389oafioajfkklj"
+REFRESH_TOKEN_EXPIRY =  "10d"
+ENCRYPTION_SECRET="dfjaskejie2872928kfnskjad"
 
 # Email Configuration (Gmail SMTP)
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
-SMTP_USER=your_email@gmail.com
-SMTP_PASS=your_app_password
+SMTP_USER=damodarryadav@gmail.com
+SMTP_PASS=password
 SMTP_FROM=Trading Platform <noreply@tradingplatform.com>
 
 # Frontend URL
@@ -70,3 +73,8 @@ ENABLE_PUSH_NOTIFICATIONS=true
 DEBUG_MODE=true
 ENABLE_API_DOCS=true
 API_DOCS_PATH=/api-docs
+
+
+CLOUDINARY_CLOUD_NAME = "akash-33"
+CLOUDINARY_API_KEY = "176559371651644"
+CLOUDINARY_API_SECRET = "-_SjXZZxvPrF_X2xATySOTgHhl8"

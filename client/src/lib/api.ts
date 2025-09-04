@@ -29,6 +29,10 @@ class ApiClient {
     this.token = token;
     if (typeof window !== 'undefined') {
       localStorage.setItem('auth_token', token);
+      // Also set an expiration timestamp (24 hours from now)
+      const expiration = new Date();
+      expiration.setHours(expiration.getHours() + 24);
+      localStorage.setItem('auth_token_expiry', expiration.toISOString());
     }
   }
 
@@ -36,7 +40,20 @@ class ApiClient {
   getToken(): string | null {
     if (this.token) return this.token;
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
+      const token = localStorage.getItem('auth_token');
+      const expiry = localStorage.getItem('auth_token_expiry');
+      
+      // Check if token has expired
+      if (token && expiry) {
+        const expirationDate = new Date(expiry);
+        if (new Date() > expirationDate) {
+          // Token has expired, clear it
+          this.clearToken();
+          return null;
+        }
+        return token;
+      }
+      return token;
     }
     return null;
   }
@@ -46,6 +63,8 @@ class ApiClient {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_token_expiry');
+      localStorage.removeItem('user_data'); // Clear any cached user data
     }
   }
 
@@ -140,6 +159,20 @@ export const marketAPI = {
   getTopLosers: () => apiClient.get('/market/losers'),
   getMostActive: () => apiClient.get('/market/active'),
   searchStocks: (query: string) => apiClient.get('/market/search', { query }),
+  
+  // Enhanced Stock Detail APIs
+  getStockDetails: (symbol: string) => apiClient.get(`/market/stock/${symbol}/details`),
+  getStockHistory: (symbol: string, period: string = '1M') => apiClient.get(`/market/stock/${symbol}/history`, { period }),
+  getStockNews: (symbol: string) => apiClient.get(`/market/stock/${symbol}/news`),
+  getStockFinancials: (symbol: string) => apiClient.get(`/market/stock/${symbol}/financials`),
+  getStockAnalysis: (symbol: string) => apiClient.get(`/market/stock/${symbol}/analysis`),
+  getStockPeers: (symbol: string) => apiClient.get(`/market/stock/${symbol}/peers`),
+  
+  // Technical Analysis
+  getTechnicalIndicators: (symbol: string, indicators: string[]) => 
+    apiClient.get(`/market/stock/${symbol}/technical`, { indicators: indicators.join(',') }),
+  getChartData: (symbol: string, interval: string = '1D', period: string = '1M') => 
+    apiClient.get(`/market/stock/${symbol}/chart`, { interval, period }),
 };
 
 // Portfolio API

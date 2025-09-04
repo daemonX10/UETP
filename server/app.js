@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
-const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet')// Routes
+
 const morgan = require('morgan');
 const compression = require('compression');
 require('dotenv').config();
@@ -17,6 +18,7 @@ const angeloneRoutes = require('./src/routes/angelone.route');
 const marketRoutes = require('./src/routes/market.route');
 const portfolioRoutes = require('./src/routes/portfolio.route');
 const tradingRoutes = require('./src/routes/trading.route');
+const realTradingRoutes = require('./src/routes/realTrading.route');
 
 // Import services
 const MarketDataService = require('./src/services/marketData.service');
@@ -41,6 +43,8 @@ app.use(helmet({
     },
   },
 }));
+
+
 
 // CORS configuration
 const corsOptions = {
@@ -67,6 +71,7 @@ const limiter = rateLimit({
   legacyHeaders: false
 });
 app.use('/api/', limiter);
+
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -104,6 +109,7 @@ app.use('/api/angelone', angeloneRoutes);
 app.use('/api/market', marketRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/trading', tradingRoutes);
+app.use('/api/real-trading', realTradingRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {

@@ -5,12 +5,17 @@ import { authAPI, tokenManager } from '@/lib/api';
 
 interface User {
   _id: string;
-  name: string;
+  firstName: string;
+  lastName: string;
   email: string;
   isEmailVerified: boolean;
   avatar?: string;
   phoneNumber?: string;
+  phone?: string;
+  role?: string;
   createdAt: string;
+  // Legacy compatibility
+  name?: string;
 }
 
 interface AuthContextType {
@@ -51,21 +56,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const checkAuth = async () => {
     try {
+      setIsLoading(true);
       const token = tokenManager.getToken();
+      
       if (!token) {
         setIsLoading(false);
         return;
       }
 
+      // Verify token is still valid by calling the backend
       const response = await authAPI.getCurrentUser();
       if (response.success && response.data) {
-        setUser(response.data);
+        // Handle both user data formats
+        const userData = response.data.user || response.data;
+        setUser(userData);
       } else {
+        // Token is invalid, clear it
         tokenManager.clearToken();
+        setUser(null);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
+      // If auth check fails, assume token is invalid
       tokenManager.clearToken();
+      setUser(null);
     } finally {
       setIsLoading(false);
     }
@@ -77,7 +91,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const response = await authAPI.login(credentials);
       
       if (response.success && response.data) {
-        tokenManager.setToken(response.data.token);
+        // Backend returns 'authToken', not 'token'
+        const token = response.data.authToken || response.data.token;
+        tokenManager.setToken(token);
         setUser(response.data.user);
       } else {
         throw new Error(response.message || 'Login failed');
@@ -102,7 +118,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       const response = await authAPI.register(userData);
       
       if (response.success && response.data) {
-        tokenManager.setToken(response.data.token);
+        // Backend returns 'authToken', not 'token'
+        const token = response.data.authToken || response.data.token;
+        tokenManager.setToken(token);
         setUser(response.data.user);
       } else {
         throw new Error(response.message || 'Registration failed');

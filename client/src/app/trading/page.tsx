@@ -117,15 +117,52 @@ export default function TradingPage() {
     setSuccess('');
 
     try {
+      // Get authentication token
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setError('Please login to place orders');
+        return;
+      }
+
       const orderData = {
-        ...formData,
         symbol: formData.symbol.toUpperCase(),
+        type: formData.transactionType,
+        orderType: formData.orderType,
+        quantity: formData.quantity,
+        price: formData.orderType === 'LIMIT' ? formData.price : undefined
       };
 
-      const response = await tradingAPI.placeOrder(orderData);
+      console.log('🔄 Placing REAL order:', orderData);
+
+      // Use REAL trading API
+      const response = await fetch('http://localhost:5000/api/real-trading/real-order', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      const result = await response.json();
       
-      if (response.success) {
-        setSuccess(`${formData.transactionType} order placed successfully! Order ID: ${response.data.order.orderId}`);
+      if (result.success) {
+        console.log('✅ REAL ORDER EXECUTED:', result.data);
+        
+        const execution = result.data.execution;
+        const portfolio = result.data.portfolio;
+        
+        setSuccess(`🎉 ${execution.message}
+        📊 Execution Details:
+        • Order ID: ${execution.orderId}
+        • Price: ₹${execution.executionPrice}
+        • Fees: ₹${execution.fees}
+        ${execution.realizedPnL ? `• P&L: ₹${execution.realizedPnL.toFixed(2)}` : ''}
+        
+        💰 Portfolio Update:
+        • Balance: ₹${portfolio.accountBalance.toFixed(2)}
+        • Total Value: ₹${portfolio.totalPortfolioValue.toFixed(2)}
+        • Total P&L: ₹${portfolio.totalPnL.toFixed(2)} (${portfolio.totalPnLPercent.toFixed(2)}%)`);
         
         // Reset form
         setFormData(prev => ({
@@ -134,15 +171,19 @@ export default function TradingPage() {
           price: 0,
         }));
 
-        // Redirect to portfolio after 2 seconds
+        // Refresh market data to show updated prices
+        fetchMarketData();
+
+        // Redirect to portfolio after 3 seconds to show updated holdings
         setTimeout(() => {
-          router.push('/portfolio');
-        }, 2000);
+          router.push('/orders');
+        }, 3000);
       } else {
-        setError(response.message || 'Failed to place order');
+        setError(result.message || 'Failed to place order');
       }
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to place order');
+      console.error('❌ Real order error:', error);
+      setError('Network error. Please check if server is running.');
     } finally {
       setIsLoading(false);
     }
@@ -176,7 +217,9 @@ export default function TradingPage() {
               <h1 className="text-xl font-semibold text-gray-900">Trading</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">Welcome, {user?.name}</span>
+              <span className="text-sm text-gray-700">
+                Welcome, {user?.firstName ? `${user.firstName} ${user.lastName}` : user?.email || 'User'}
+              </span>
               <Button variant="outline" onClick={() => router.push('/portfolio')}>
                 Portfolio
               </Button>

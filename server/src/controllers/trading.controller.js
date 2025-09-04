@@ -1,6 +1,9 @@
 const Order = require('../models/order.model');
 const Transaction = require('../models/transaction.model');
-const Portfolio = require('../models/portfolio.model');
+const RealPortfolio = require('../models/realPortfolio.model');
+const MarketData = require('../models/marketData.model');
+const realMarketDataService = require('../services/realMarketData');
+const { validationResult } = require('express-validator');
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/apiError');
 const ApiResponse = require('../utils/apiResponse');
